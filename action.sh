@@ -25,6 +25,8 @@ eval_boolean_action_input() {
 
 # Copy inputs into correctly-named environment variables
 export GITEA_TOKEN="${INPUT_GITEA_TOKEN}"
+export GITEA_SERVER_URL="${INPUT_GITEA_SERVER}"
+export GITEA_API_URL="${INPUT_GITEA_API}"
 export PATH="${PATH}:/semantic-release/.venv/bin"
 export GIT_COMMITTER_NAME="${INPUT_GIT_COMMITTER_NAME:="github-actions"}"
 export GIT_COMMITTER_EMAIL="${INPUT_GIT_COMMITTER_EMAIL:="github-actions@github.com"}"
