@@ -1,42 +1,102 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import secrets
 import shutil
 import stat
 import string
 from contextlib import contextmanager, suppress
-from tempfile import NamedTemporaryFile
+from pathlib import Path
+from textwrap import indent
 from typing import TYPE_CHECKING, Tuple
 
+from git import Git, Repo
 from pydantic.dataclasses import dataclass
 
-from semantic_release.changelog.context import make_changelog_context
+from semantic_release.changelog.context import ChangelogMode, make_changelog_context
 from semantic_release.changelog.release_history import ReleaseHistory
-from semantic_release.cli import config as cliConfigModule
 from semantic_release.commit_parser._base import CommitParser, ParserOptions
-from semantic_release.commit_parser.token import ParseResult
+from semantic_release.commit_parser.conventional import ConventionalCommitParser
+from semantic_release.commit_parser.token import (
+    ParsedCommit,
+    ParsedMessageResult,
+    ParseError,
+    ParseResult,
+)
+from semantic_release.enums import LevelBump
+
+from tests.const import SUCCESS_EXIT_CODE
 
 if TYPE_CHECKING:
     import filecmp
-    from pathlib import Path
-    from typing import Any, Generator, Iterable, TypeVar
+    from typing import Any, Callable, Generator, Iterable, TypeVar
 
     try:
-        from typing import TypeAlias
-    except ImportError:
-        # for python 3.8 and 3.9
+        # Python 3.8 and 3.9 compatibility
         from typing_extensions import TypeAlias
+    except ImportError:
+        from typing import TypeAlias  # type: ignore[attr-defined, no-redef]
 
     from unittest.mock import MagicMock
 
-    from git import Repo
+    from click.testing import Result as ClickInvokeResult
+    from git import Commit
 
     from semantic_release.cli.config import RuntimeContext
 
     _R = TypeVar("_R")
 
-    GitCommandWrapperType: TypeAlias = cliConfigModule.Repo.GitCommandWrapperType
+    GitCommandWrapperType: TypeAlias = Git
+
+
+def get_func_qual_name(func: Callable) -> str:
+    return str.join(".", filter(None, [func.__module__, func.__qualname__]))
+
+
+def assert_exit_code(
+    exit_code: int, result: ClickInvokeResult, cli_cmd: list[str]
+) -> bool:
+    if result.exit_code != exit_code:
+        raise AssertionError(
+            str.join(
+                os.linesep,
+                [
+                    f"{result.exit_code} != {exit_code} (actual != expected)",
+                    "",
+                    # Explain what command failed
+                    "Unexpected exit code from command:",
+                    indent(f"'{str.join(' ', cli_cmd)}'", " " * 2),
+                    "",
+                    # Add indentation to each line for stdout & stderr
+                    "stdout:",
+                    indent(result.stdout, " " * 2) if result.stdout.strip() else "",
+                    "stderr:",
+                    indent(result.stderr, " " * 2) if result.stderr.strip() else "",
+                ],
+            )
+        )
+    return True
+
+
+def assert_successful_exit_code(result: ClickInvokeResult, cli_cmd: list[str]) -> bool:
+    return assert_exit_code(SUCCESS_EXIT_CODE, result, cli_cmd)
+
+
+def get_full_qualname(callable_obj: Callable) -> str:
+    parts = filter(
+        None,
+        [
+            callable_obj.__module__,
+            (
+                None
+                if callable_obj.__class__.__name__ == "function"
+                else callable_obj.__class__.__name__
+            ),
+            callable_obj.__name__,
+        ],
+    )
+    return str.join(".", parts)
 
 
 def copy_dir_tree(src_dir: Path | str, dst_dir: Path | str) -> None:
@@ -66,6 +126,13 @@ def remove_dir_tree(directory: Path | str = ".", force: bool = False) -> None:
         shutil.rmtree(str(directory), onerror=on_read_only_error if force else None)
 
 
+def dynamic_python_import(file_path: Path, module_name: str):
+    spec = importlib.util.spec_from_file_location(module_name, str(file_path))
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
 @contextmanager
 def temporary_working_directory(directory: Path | str) -> Generator[None, None, None]:
     cwd = os.getcwd()
@@ -83,26 +150,16 @@ def shortuid(length: int = 8) -> str:
 
 
 def add_text_to_file(repo: Repo, filename: str, text: str | None = None):
-    with open(f"{repo.working_tree_dir}/{filename}", "a+") as f:
-        f.write(text or f"default text {shortuid(12)}")
-        f.write("\n")
+    """Makes a deterministic file change for testing"""
+    tgt_file = Path(repo.working_tree_dir or ".") / filename
+    tgt_file.parent.mkdir(parents=True, exist_ok=True)
+    file_contents = tgt_file.read_text() if tgt_file.exists() else ""
+    line_number = len(file_contents.splitlines())
+
+    file_contents += f"{line_number}  {text or 'default text'}{os.linesep}"
+    tgt_file.write_text(file_contents, encoding="utf-8")
 
     repo.index.add(filename)
-
-
-@contextmanager
-def netrc_file(machine: str) -> NamedTemporaryFile:
-    with NamedTemporaryFile("w") as netrc:
-        # Add these attributes to use in tests as source of truth
-        netrc.login_username = "username"
-        netrc.login_password = "password"
-
-        netrc.write(f"machine {machine}" + "\n")
-        netrc.write(f"login {netrc.login_username}" + "\n")
-        netrc.write(f"password {netrc.login_password}" + "\n")
-        netrc.flush()
-
-        yield netrc
 
 
 def flatten_dircmp(dcmp: filecmp.dircmp) -> list[str]:
@@ -137,15 +194,23 @@ def actions_output_to_dict(output: str) -> dict[str, str]:
 
 
 def get_release_history_from_context(runtime_context: RuntimeContext) -> ReleaseHistory:
-    rh = ReleaseHistory.from_git_history(
-        runtime_context.repo,
-        runtime_context.version_translator,
-        runtime_context.commit_parser,
-        runtime_context.changelog_excluded_commit_patterns,
+    with Repo(str(runtime_context.repo_dir)) as git_repo:
+        release_history = ReleaseHistory.from_git_history(
+            git_repo,
+            runtime_context.version_translator,
+            runtime_context.commit_parser,
+            runtime_context.changelog_excluded_commit_patterns,
+        )
+    changelog_context = make_changelog_context(
+        hvcs_client=runtime_context.hvcs_client,
+        release_history=release_history,
+        mode=ChangelogMode.INIT,
+        prev_changelog_file=Path("CHANGELOG.md"),
+        insertion_flag="",
+        mask_initial_release=runtime_context.changelog_mask_initial_release,
     )
-    changelog_context = make_changelog_context(runtime_context.hvcs_client, rh)
     changelog_context.bind_to_environment(runtime_context.template_environment)
-    return rh
+    return release_history
 
 
 def prepare_mocked_git_command_wrapper_type(
@@ -176,7 +241,7 @@ def prepare_mocked_git_command_wrapper_type(
     >>> mocked_push.assert_called_once()
     """
 
-    class MockGitCommandWrapperType(cliConfigModule.Repo.GitCommandWrapperType):
+    class MockGitCommandWrapperType(Git):
         def __getattr__(self, name: str) -> Any:
             try:
                 return object.__getattribute__(self, f"mocked_{name}")
@@ -189,7 +254,15 @@ def prepare_mocked_git_command_wrapper_type(
 
 
 class CustomParserWithNoOpts(CommitParser[ParseResult, ParserOptions]):
-    parser_options = ParserOptions
+    def parse(self, commit: Commit) -> ParsedCommit | ParseError:
+        return ParsedCommit(
+            bump=LevelBump.NO_RELEASE,
+            type="",
+            scope="",
+            descriptions=[],
+            breaking_descriptions=[],
+            commit=commit,
+        )
 
 
 @dataclass
@@ -199,3 +272,35 @@ class CustomParserOpts(ParserOptions):
 
 class CustomParserWithOpts(CommitParser[ParseResult, CustomParserOpts]):
     parser_options = CustomParserOpts
+
+    def parse(self, commit: Commit) -> ParsedCommit | ParseError:
+        return ParsedCommit(
+            bump=LevelBump.NO_RELEASE,
+            type="custom",
+            scope="",
+            descriptions=[],
+            breaking_descriptions=[],
+            commit=commit,
+        )
+
+
+class IncompleteCustomParser(CommitParser):
+    pass
+
+
+class CustomConventionalParserWithIgnorePatterns(ConventionalCommitParser):
+    def parse(self, commit: Commit) -> ParsedCommit | ParseError:
+        if not (parse_msg_result := super().parse_message(str(commit.message))):
+            return ParseError(commit, "Unable to parse commit")
+
+        return ParsedCommit.from_parsed_message_result(
+            commit,
+            ParsedMessageResult(
+                **{
+                    **parse_msg_result._asdict(),
+                    "include_in_changelog": bool(
+                        not str(commit.message).startswith("chore")
+                    ),
+                }
+            ),
+        )

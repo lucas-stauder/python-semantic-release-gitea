@@ -1,12 +1,12 @@
 # Ref: https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
 # and https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
+requires = ["setuptools >= 75.3.0, < 81.0.0", "wheel ~= 0.42"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-semantic-release"
-version = "9.3.1"
+version = "10.2.0"
 description = "Automatic Semantic Versioning for Python projects"
 requires-python = ">=3.8"
 license = { text = "MIT" }
@@ -18,27 +18,30 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 readme = "README.rst"
 authors = [{ name = "Rolf Erik Lekang", email = "me@rolflekang.com" }]
 dependencies = [
-  "click>=8,<9",
-  "click-option-group~=0.5",
-  "gitpython>=3.0.8,<4",
-  "requests>=2.25,<3",
-  "jinja2>=3.1.2,<4",
-  "python-gitlab>=2,<5",
-  "tomlkit~=0.11",
-  "dotty-dict>=1.3.0,<2",
-  "importlib-resources>=5.7,<7",
-  "pydantic>=2,<3",
-  "rich>=12.5.1",
-  "shellingham>=1.5.0.post1",
+  "click ~= 8.1.0",
+  "click-option-group ~= 0.5",
+  "gitpython ~= 3.0",
+  "requests ~= 2.25",
+  "jinja2 ~= 3.1",
+  "python-gitlab >= 4.0.0, < 7.0.0",
+  "tomlkit ~= 0.11",
+  "dotty-dict ~= 1.3",
+  "importlib-resources ~= 6.0",
+  "pydantic ~= 2.0",
+  "rich ~= 14.0",
+  "shellingham ~= 1.5",
+  "Deprecated ~= 1.2",  # Backport of deprecated decorator for python 3.8
 ]
 
 [project.scripts]
-semantic-release = "semantic_release.cli:main"
-psr = "semantic_release.cli:main"
+python-semantic-release = "semantic_release.__main__:main"
+semantic-release = "semantic_release.__main__:main"
+psr = "semantic_release.__main__:main"
 
 [project.urls]
 changelog = "https://github.com/python-semantic-release/python-semantic-release/blob/master/CHANGELOG.md"
@@ -48,46 +51,79 @@ issues = "https://github.com/python-semantic-release/python-semantic-release/iss
 repository = "http://github.com/python-semantic-release/python-semantic-release.git"
 
 [project.optional-dependencies]
+build = [
+  "build ~= 1.2"
+]
 docs = [
-  "Sphinx<=6.0.0",
-  "sphinxcontrib-apidoc==0.3.0",
-  "sphinx-autobuild==2021.03.14",
-  "furo>=2023.3.27",
+  "Sphinx ~= 6.0",
+  "sphinxcontrib-apidoc == 0.5.0",
+  "sphinx-autobuild == 2024.2.4",
+  "furo ~= 2024.1",
 ]
 test = [
-  "coverage[toml]>=6,<8",
-  "pytest>=7,<8",
-  "pytest-env~=1.0",
-  "pytest-xdist>=2,<4",
-  "pytest-mock>=3,<4",
-  "pytest-lazy-fixture~=0.6.3",
-  "pytest-cov>=4,<5",
-  "pytest-pretty>=1.2.0,<2",
-  "pytest-clarity>=1.0.1",
-  "responses==0.23.3",
-  "requests-mock>=1.10.0,<2",
-  "types-pytest-lazy-fixture>=0.6.3.3",
+  "coverage[toml] ~= 7.0",
+  "filelock ~= 3.15",
+  "flatdict ~= 4.0",
+  "freezegun ~= 1.5",
+  "pyyaml ~= 6.0",
+  "pytest ~= 8.3",
+  "pytest-clarity ~= 1.0",
+  "pytest-cov >= 5.0.0, < 7.0.0",
+  "pytest-env ~= 1.0",
+  "pytest-lazy-fixtures ~= 1.1.1",
+  "pytest-mock ~= 3.0",
+  "pytest-order ~= 1.3",
+  "pytest-pretty ~= 1.2",
+  "pytest-xdist ~= 3.0",
+  "responses ~= 0.25.0",
+  "requests-mock ~= 1.10",
 ]
-dev = ["pre-commit", "tox", "ruff==0.3.3"]
-mypy = ["mypy", "types-requests"]
+dev = [
+  "pre-commit ~= 3.5",
+  "tox ~= 4.11",
+  "ruff == 0.6.1"
+]
+mypy = [
+  "mypy == 1.16.1",
+  "types-Deprecated ~= 1.2",
+  "types-requests ~= 2.32.0",
+  "types-pyyaml ~= 6.0",
+]
+
+
+[tool.setuptools]
+include-package-data = true
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 
 [tool.pytest.ini_options]
 env = [
   "PYTHONHASHSEED = 123456"
 ]
 addopts = [
-  "-nauto",
+  # TO DEBUG in single process, swap auto to 0
+  # "-nauto",
+  # "-n0",
   "-ra",
   "--diff-symbols",
-  "--cache-clear",
-  "--cov=semantic_release",
-  "--cov-context=test",
-  "--cov-report",
-  "html:coverage-html",
-  "--cov-report",
-  "term",
+  "--durations=20",
+  # No default coverage - causes problems with debuggers
+  # "--cov=semantic_release",
+  # "--cov-context=test",
+  # "--cov-report=html:coverage-html",
+  # "--cov-report=term-missing",
 ]
-python_files = ["tests/test_*.py", "tests/**/test_*.py"]
+testpaths = [
+  "tests"
+]
+markers = [
+  "unit: mark a test as a unit test",
+  "e2e: mark a test as a end-to-end test",
+  "comprehensive: mark a test as a comprehensive (multiple variations) test",
+]
 
 [tool.coverage.html]
 show_contexts = true
@@ -120,7 +156,7 @@ commands =
 [testenv:mypy]
 deps = .[mypy]
 commands =
-    mypy semantic_release
+    mypy .
 
 [testenv:coverage]
 deps = coverage[toml]
@@ -137,13 +173,12 @@ commands =
 
 [tool.mypy]
 python_version = "3.8"
-packages = ["semantic_release"]
 show_column_numbers = true
 show_error_context = true
 pretty = true
 error_summary = true
 follow_imports = "normal"
-ignore_missing_imports = true   # gitpython is very dynamic
+enable_error_code = ["ignore-without-code"]
 disallow_untyped_calls = true
 # warn_return_any = true
 strict_optional = true
@@ -159,9 +194,19 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
-allow_untyped_defs = true
-allow_incomplete_defs = true
-allow_untyped_calls = true
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "flatdict"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "shellingham"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "dotty_dict"
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88
@@ -209,6 +254,8 @@ ignore = [
   "DTZ",
   # flake8-errmsg
   "EM",
+  # Some todos and some examples; leave this disabled for now
+  "ERA001",
   # don't compare types, use isinstance()
   # sometimes using type(x) == y is deliberately chosen to exclude
   # subclasses
@@ -221,6 +268,8 @@ ignore = [
   "INP001",
   # Errors should end with "Error"
   "N818",
+  # mypy prevents blanket-type-ignore
+  "PGH003",
   # Fixtures that do not return a value need an underscore prefix.  The rule
   # does not handle generators.
   "PT004",
@@ -269,23 +318,23 @@ ignore = [
 ]
 
 external = ["V"]
-ignore-init-module-imports = true
 task-tags = ["NOTE", "TODO", "FIXME", "XXX"]
 
 [tool.ruff.format]
-quote-style = "double"
+docstring-code-format = true
 indent-style = "space"
 line-ending = "lf"
+quote-style = "double"
 
 [tool.ruff.lint.per-file-ignores]
 # Imported but unused
 "__init__.py" = ["F401"]
 # pydantic 1 can't handle __future__ annotations-enabled syntax on < 3.10
-"semantic_release/cli/config.py" = ["UP", "TCH"]
-"semantic_release/commit_parser/*" = ["UP", "FA", "TCH"]
+"src/semantic_release/cli/config.py" = ["UP", "TCH"]
+"src/semantic_release/commit_parser/*" = ["UP", "FA", "TCH"]
 # Method argument not used. This is mostly a base class
 # anyway
-"semantic_release/hvcs/_base.py" = ["ARG002"]
+"src/semantic_release/hvcs/_base.py" = ["ARG002"]
 # from tests.fixtures import * is deliberate
 "tests/conftest.py" = ["F403"]
 "tests/fixtures/**/__init__.py" = ["F403"]
@@ -310,7 +359,7 @@ line-ending = "lf"
   # Annotations
   "ANN",
   # Using format instead of f-string for readablity
-  "UP032"
+  "UP032",
 ]
 
 
@@ -356,70 +405,56 @@ ignore_names = ["change_to_ex_proj_dir", "init_example_project"]
 
 [tool.semantic_release]
 logging_use_named_masks = true
-tag_format = "v{version}"
-commit_parser = "angular"
-commit_author = "semantic-release <semantic-release>"
-commit_message = "{version}\n\nAutomatically generated by python-semantic-release"
+commit_parser = "conventional"
+commit_parser_options = { parse_squash_commits = true, ignore_merge_commits = true }
 build_command = """
-    python -m pip install build~=0.10.0
+    python -m pip install -e .[build]
     python -m build .
 """
 major_on_zero = true
-assets = []
-version_variables = ["semantic_release/__init__.py:__version__"]
+version_variables = [
+  "src/gh_action/requirements.txt:python-semantic-release:nf",
+  "docs/configuration/automatic-releases/github-actions.rst:python-semantic-release/python-semantic-release:tf",
+  "docs/configuration/automatic-releases/github-actions.rst:python-semantic-release/publish-action:tf",
+]
 version_toml = ["pyproject.toml:project.version"]
 
-[tool.semantic_release.commit_parser_options]
-allowed_tags = [
-  "build",
-  "chore",
-  "ci",
-  "docs",
-  "feat",
-  "fix",
-  "perf",
-  "style",
-  "refactor",
-  "test",
-]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
-
 [tool.semantic_release.changelog]
-template_dir = "templates"
-changelog_file = "CHANGELOG.md"
-exclude_commit_patterns = []
-
-[tool.semantic_release.changelog.environment]
-block_start_string = "{%"
-block_end_string = "%}"
-variable_start_string = "{{"
-variable_end_string = "}}"
-comment_start_string = "{#"
-comment_end_string = "#}"
-trim_blocks = false
-lstrip_blocks = false
-newline_sequence = "\n"
-keep_trailing_newline = false
-extensions = []
-autoescape = true
+# default_templates = { changelog_file = "CHANGELOG.rst" }
+exclude_commit_patterns = [
+  '''chore(?:\([^)]*?\))?: .+''',
+  '''ci(?:\([^)]*?\))?: .+''',
+  '''refactor(?:\([^)]*?\))?: .+''',
+  '''style(?:\([^)]*?\))?: .+''',
+  '''test(?:\([^)]*?\))?: .+''',
+  '''build\((?!deps\): .+)''',
+  '''Merged? .*''',
+  '''Initial Commit.*''',
+  # Old semantic-release version commits
+  '''^\d+\.\d+\.\d+''',
+]
+insertion_flag = "=========\nCHANGELOG\n========="
+mode = "update"
+template_dir = "config/release-templates"
 
 [tool.semantic_release.branches.main]
-match = "(main|master)"
+match = "^(main|master)$"
 prerelease = false
 prerelease_token = "rc"
 
-[tool.semantic_release.branches."8.0.x"]
-match = "8.0.x"
+[tool.semantic_release.branches.alpha]
+match = "^(feat|fix|perf)/.+"
 prerelease = true
-prerelease_token = "rc"
+prerelease_token = "alpha"
+
+[tool.semantic_release.branches.dev]
+match = ".+"
+prerelease = true
+prerelease_token = "dev"
 
 [tool.semantic_release.remote]
-name = "origin"
 type = "github"
-ignore_token_for_push = false
 token = { env = "GH_TOKEN" }
 
 [tool.semantic_release.publish]
-dist_glob_patterns = ["dist/*"]
 upload_to_vcs_release = true

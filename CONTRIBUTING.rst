@@ -1,3 +1,5 @@
+.. _contributing_guide:
+
 Contributing
 ------------
 
@@ -7,17 +9,21 @@ Please remember to write tests for the cool things you create or fix.
 
 Unsure about something? No worries, `open an issue`_.
 
-.. _open an issue: https://github.com/relekang/python-semantic-release/issues/new
+.. _open an issue: https://github.com/python-semantic-release/python-semantic-release/issues/new
 
 Commit messages
 ~~~~~~~~~~~~~~~
 
 Since python-semantic-release is released with python-semantic-release we need the commit messages
-to adhere to the `angular commit guidelines`_. If you are unsure how to describe the change correctly
-Just try and ask in your pr, or ask on gitter. If we think it should be something else or there is a
-pull-request without tags we will help out in adding or changing them.
+to adhere to the `Conventional Commits Specification`_.  Although scopes are optional, scopes are
+expected where applicable. Changes should be committed separately with the commit type they represent,
+do not combine them all into one commit.
 
-.. _angular commit guidelines: https://github.com/angular/angular.js/blob/master/DEVELOPERS.md#commits
+If you are unsure how to describe the change correctly just try and ask about it in your pr. If we
+think it should be something else or there is a pull-request without tags we will help out in
+adding or changing them.
+
+.. _Conventional Commits Specification: https://www.conventionalcommits.org/en/v1.0.0
 
 Releases
 ~~~~~~~~
@@ -33,13 +39,13 @@ Install this module and the development dependencies
 
 .. code-block:: bash
 
-    pip install -e ".[dev,mypy,test]"
+    pip install -e .[dev,mypy,test]
 
 And if you'd like to build the documentation locally
 
 .. code-block:: bash
 
-    pip install -e ".[docs]"
+    pip install -e .[docs]
     sphinx-autobuild --open-browser docs docs/_build/html
 
 Testing
@@ -53,33 +59,18 @@ To test your modifications locally:
     tox
 
     # Run all tests for your current installed Python version (with full error output)
-    pytest -vv tests/
+    pytest -vv --comprehensive
 
-If you need to run tests in a debugger, such as VSCode, you will need to adjust
-``pyproject.toml`` temporarily:
+    # Run unit tests for your current installed Python version
+    pytest
+    # or
+    pytest -vv -m unit
 
-.. code-block:: diff
+    # Run end-to-end tests for your current installed Python version (with full error output)
+    pytest -vv -m e2e [--comprehensive]
 
-    diff --git a/pyproject.toml b/pyproject.toml
-
-      [tool.pytest.ini_options]
-      addopts = [
-    +     "-n0",
-    -     "-nauto",
-          "-ra",
-          "--cache-clear",
-    -     "--cov=semantic_release",
-    -     "--cov-context=test",
-    -     "--cov-report",
-    -     "html:coverage-html",
-    -     "--cov-report",
-    -     "term",
-      ]
-
-.. note::
-
-    The ``-n0`` option disables ``xdist``'s parallel testing. The removal of the coverage options
-    is to avoid a bug in ``pytest-cov`` that prevents VSCode from stopping at the breakpoints.
+The ``--comprehensive`` flag is optional and will run all the variations of tests and it does
+take significantly longer to run.
 
 Building
 ~~~~~~~~
@@ -93,5 +84,5 @@ package locally:
 
 .. code-block:: bash
 
-    python -m pip install build~=0.10.0
+    pip install -e .[build]
     python -m build .
